@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}Log in — GradeCalc{% endblock %}
+{% block content %}
+<div class="card login-card">
+  <h1>Sign in</h1>
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  <form method="post" id="login-form">
+    <!-- District search -->
+    <label>School / District
+      <div class="district-wrap">
+        <input id="district-search" type="text" placeholder="Search your school or district…"
+               autocomplete="off" value="{{ district_name or '' }}">
+        <div id="district-results" class="district-dropdown"></div>
+      </div>
+    </label>
+    <input type="hidden" name="base_url"  id="base_url"  value="{{ base_url or '' }}" required>
+    <input type="hidden" name="app_name"  id="app_name"  value="{{ app_name or '' }}">
+    <div id="district-confirm" class="district-confirm {% if not base_url %}hidden{% endif %}">
+      <span id="district-confirm-text">{{ district_name or '' }}</span>
+      <button type="button" class="btn-ghost btn-small" onclick="clearDistrict()">Change</button>
+    </div>
+
+    <label>Username<input name="username" autocomplete="username" required></label>
+    <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+    <button type="submit" id="login-btn" {% if not base_url %}disabled{% endif %}>Log in</button>
+  </form>
+  <p class="muted small">Credentials are held in memory only and never written to disk.</p>
+</div>
+
+<script>
+let searchTimeout = null;
+
+const searchInput   = document.getElementById('district-search');
+const resultsBox    = document.getElementById('district-results');
+const baseUrlInput  = document.getElementById('base_url');
+const appNameInput  = document.getElementById('app_name');
+const loginBtn      = document.getElementById('login-btn');
+const confirmDiv    = document.getElementById('district-confirm');
+const confirmText   = document.getElementById('district-confirm-text');
+
+searchInput.addEventListener('input', () => {
+  const q = searchInput.value.trim();
+  clearTimeout(searchTimeout);
+  if (q.length < 3) { resultsBox.innerHTML = ''; resultsBox.classList.remove('open'); return; }
+  searchTimeout = setTimeout(() => searchDistricts(q), 300);
+});
+
+searchInput.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { resultsBox.innerHTML = ''; resultsBox.classList.remove('open'); }
+});
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.district-wrap')) {
+    resultsBox.innerHTML = ''; resultsBox.classList.remove('open');
+  }
+});
+
+async function searchDistricts(q) {
+  // Extract a rough state hint from the query (last word if 2 chars, else '')
+  const words = q.split(/\s+/);
+  const lastWord = words[words.length - 1];
+  const state = lastWord.length === 2 ? lastWord.toUpperCase() : 'CA';
+  try {
+    const res = await fetch(`/api/districts?q=${encodeURIComponent(q)}&state=${encodeURIComponent(state)}`);
+    const data = await res.json();
+    const districts = data.data || data || [];
+    renderResults(districts);
+  } catch {
+    resultsBox.innerHTML = '<div class="district-item muted">Search unavailable</div>';
+    resultsBox.classList.add('open');
+  }
+}
+
+function renderResults(districts) {
+  if (!districts.length) {
+    resultsBox.innerHTML = '<div class="district-item muted small">No results — try a different name or state</div>';
+    resultsBox.classList.add('open');
+    return;
+  }
+  // IC district search returns many possible field names depending on API version
+  const items = districts.slice(0, 8).map(d => {
+    const name    = d.district_name || d.districtName || d.name || 'Unknown';
+    const url     = d.district_baseurl || d.district_baseURL || d.districtBaseURL ||
+                    d.baseURL || d.baseUrl || d.campusBaseURL || d.url || d.districtUrl || '';
+    const appName = d.district_app_name || d.appName || '';
+    const loc     = [d.city, d.state_code || d.state || d.stateName].filter(Boolean).join(', ');
+    return { name, url, appName, loc };
+  }).filter(d => d.url); // drop any entry with no URL
+
+  if (!items.length) {
+    resultsBox.innerHTML = '<div class="district-item muted small">No results — try adding your state abbreviation (e.g. "Dublin CA")</div>';
+    resultsBox.classList.add('open');
+    return;
+  }
+
+  resultsBox.innerHTML = items.map(d =>
+    `<div class="district-item" data-url="${d.url}" data-name="${d.name}" data-appname="${d.appName || ''}">
+      <span class="district-item-name">${d.name}</span>
+      ${d.loc ? `<span class="district-item-loc muted small">${d.loc}</span>` : ''}
+    </div>`
+  ).join('');
+  resultsBox.classList.add('open');
+  resultsBox.querySelectorAll('.district-item[data-url]').forEach(el => {
+    el.addEventListener('click', () => selectDistrict(el.dataset.url, el.dataset.name, el.dataset.appname));
+  });
+}
+
+function selectDistrict(url, name, knownAppName) {
+  if (!url) return;
+  // Ensure scheme
+  let base = url.startsWith('http') ? url : 'https://' + url;
+  base = base.replace(/\/+$/, '');
+
+  // If the URL has no path (just a hostname), append /campus
+  let pathname = '/';
+  try { pathname = new URL(base).pathname; } catch {}
+  if (pathname === '/' || pathname === '') base = base + '/campus';
+
+  // Use the API-provided appName if available, else derive from URL path
+  let appName = knownAppName || 'campus';
+  if (!knownAppName) {
+    try {
+      const parts = new URL(base).pathname.split('/').filter(Boolean);
+      if (parts.length) appName = parts[parts.length - 1];
+    } catch {}
+  }
+
+  baseUrlInput.value  = base;
+  appNameInput.value  = appName;
+  searchInput.value   = '';
+  confirmText.textContent = name;
+  confirmDiv.classList.remove('hidden');
+  resultsBox.innerHTML = '';
+  resultsBox.classList.remove('open');
+  loginBtn.disabled = false;
+}
+
+function clearDistrict() {
+  baseUrlInput.value = '';
+  appNameInput.value = '';
+  confirmDiv.classList.add('hidden');
+  loginBtn.disabled = true;
+  searchInput.value = '';
+  searchInput.focus();
+}
+
+// If district already pre-filled (e.g. error re-render), enable button
+if (baseUrlInput.value) loginBtn.disabled = false;
+</script>
+{% endblock %}

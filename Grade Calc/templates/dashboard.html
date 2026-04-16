@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — GradeCalc{% endblock %}
+{% block content %}
+
+{% if gpa and gpa.weighted is not none %}
+<div class="gpa-banner">
+  <div class="gpa-block">
+    <div class="gpa-label">Weighted GPA</div>
+    <div class="gpa-value">{{ gpa.weighted }}</div>
+  </div>
+  <div class="gpa-divider"></div>
+  <div class="gpa-block">
+    <div class="gpa-label">Unweighted GPA</div>
+    <div class="gpa-value gpa-unweighted">{{ gpa.unweighted }}</div>
+  </div>
+  <div class="gpa-breakdown">
+    {% for b in gpa.breakdown %}
+      <div class="gpa-row">
+        <span class="gpa-course-name">{{ b.name }}</span>
+        <span class="gpa-type-badge gpa-type-{{ b.type | lower }}">{{ b.type }}</span>
+        <span class="gpa-pts">{{ b.weighted }} / {{ b.unweighted }}</span>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<h1 style="margin-top: 28px;">Your courses</h1>
+{% if not courses %}
+  <p class="muted">No courses found.</p>
+{% endif %}
+<div class="grid">
+  {% for c in courses %}
+    {% set p = c.percent %}
+    {% set cls = 'grade-none' %}
+    {% if p is not none %}
+      {% if p >= 90 %}{% set cls = 'grade-good' %}
+      {% elif p >= 80 %}{% set cls = 'grade-ok' %}
+      {% elif p >= 70 %}{% set cls = 'grade-warn' %}
+      {% else %}{% set cls = 'grade-bad' %}{% endif %}
+    {% endif %}
+    {% set ctype = '' %}
+    {% set cname_upper = c.name | upper %}
+    {% if 'AP ' in cname_upper or 'ADVANCED PLACEMENT' in cname_upper %}
+      {% set ctype = 'AP' %}
+    {% elif 'HONORS' in cname_upper or 'HON ' in cname_upper or '(H)' in cname_upper or '(HP)' in cname_upper %}
+      {% set ctype = 'HONORS' %}
+    {% endif %}
+    <a class="course-card {{ cls }}" href="{{ url_for('course', idx=loop.index0) }}">
+      <div class="course-head">
+        <div class="course-name">
+          {{ c.name }}
+          {% if ctype %}
+            <span class="course-type-badge course-type-{{ ctype | lower }}">{{ ctype }}</span>
+          {% endif %}
+        </div>
+        <div class="course-meta">{{ c.teacher }}{% if c.section %} · P{{ c.section }}{% endif %}</div>
+      </div>
+      <div class="course-grade">
+        {% if p is not none %}{{ p }}%{% else %}—{% endif %}
+        {% if c.letter %}<span class="letter">{{ c.letter }}</span>{% endif %}
+      </div>
+    </a>
+  {% endfor %}
+</div>
+{% endblock %}

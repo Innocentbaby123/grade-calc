@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Error — GradeCalc{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Something went wrong</h1>
+  <p class="error">{{ error }}</p>
+  {% if raw %}
+  <details>
+    <summary>Raw response (for debugging)</summary>
+    <pre>{{ raw }}</pre>
+  </details>
+  {% endif %}
+  <p><a href="{{ url_for('login') }}">Back to login</a></p>
+</div>
+{% endblock %}

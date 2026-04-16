@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}Grade Calc{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header class="topbar">
+  <a href="{{ url_for('index') }}" class="brand">Grade<span>Calc</span></a>
+  <nav>
+    {% if request.endpoint and request.endpoint != 'login' %}
+      <a href="{{ url_for('refresh') }}">Refresh</a>
+      <a href="{{ url_for('logout') }}">Log out</a>
+    {% endif %}
+  </nav>
+</header>
+<main class="container">
+  {% block content %}{% endblock %}
+</main>
+</body>
+</html>

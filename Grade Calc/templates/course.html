@@ -1,0 +1,592 @@
+{% extends "base.html" %}
+{% block title %}{{ course.name }} — GradeCalc{% endblock %}
+{% block content %}
+<a href="{{ url_for('dashboard') }}" class="back">← Back to dashboard</a>
+
+<div class="course-header">
+  <div>
+    <h1>{{ course.name }}</h1>
+    <div class="muted">{{ course.teacher }}{% if course.section %} · Section {{ course.section }}{% endif %}
+    {% if course.current_term %} · {{ course.current_term }}{% endif %}</div>
+  </div>
+  <div class="live-grade" id="liveGrade">
+    <div style="display:flex;align-items:baseline;gap:8px">
+      <span id="livePercent">{% if course.percent is not none %}{{ course.percent }}{% else %}—{% endif %}</span>{% if course.percent is not none %}<span>%</span>{% endif %}
+      {% if course.letter %}<span class="letter" id="liveLetter">{{ course.letter }}</span>{% endif %}
+      <span id="gradeDelta" class="grade-delta"></span>
+    </div>
+    <div class="grade-source" id="gradeSource">from Infinite Campus</div>
+  </div>
+</div>
+
+{% if course.term_history and course.term_history|length > 1 %}
+<section class="panel">
+  <h2>Grade history</h2>
+  <div class="term-grid">
+    {% for t in course.term_history %}
+    <div class="term-card {% if t.pct is not none %}{% if t.pct >= 90 %}grade-good{% elif t.pct >= 80 %}grade-ok{% elif t.pct >= 70 %}grade-warn{% else %}grade-bad{% endif %}{% endif %}">
+      <div class="term-name">{{ t.name }}</div>
+      <div class="term-pct">{% if t.pct is not none %}{{ t.pct }}%{% else %}—{% endif %}</div>
+      <div class="term-letter muted">{{ t.letter }}</div>
+      {% if t.earned is not none and t.total is not none %}
+      <div class="term-pts muted small">{{ t.earned }} / {{ t.total }} pts</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<!-- ── Assignment editor ─────────────────────────────────────── -->
+<section class="panel" id="assignmentPanel">
+  <div class="panel-head">
+    <h2>Assignments</h2>
+    <div class="panel-actions">
+      <button class="btn-ghost" onclick="resetAll()">Reset changes</button>
+      <button class="btn-add" onclick="addHypothetical()">+ Add hypothetical</button>
+    </div>
+  </div>
+
+  {#
+    Build the master category order:
+      1. All categories from course.categories (includes empty ones like Finals)
+      2. Then any assignment categories not already in that list (orphans / unknown cats)
+  #}
+  {% set ns = namespace(cats_ordered=[], cats_lower=[]) %}
+  {% for cat in course.categories %}
+    {% set ns.cats_ordered = ns.cats_ordered + [cat.name] %}
+    {% set ns.cats_lower   = ns.cats_lower   + [cat.name | lower] %}
+  {% endfor %}
+  {% for a in course.assignments %}
+    {% if a.category | lower not in ns.cats_lower %}
+      {% set ns.cats_ordered = ns.cats_ordered + [a.category] %}
+      {% set ns.cats_lower   = ns.cats_lower   + [a.category | lower] %}
+    {% endif %}
+  {% endfor %}
+
+  {% if ns.cats_ordered %}
+    {% for cat_name in ns.cats_ordered %}
+      {# Find weight for this category #}
+      {% set cat_w = namespace(val=none) %}
+      {% for cat in course.categories %}
+        {% if cat.name == cat_name %}{% set cat_w.val = cat.weight %}{% endif %}
+      {% endfor %}
+
+      {# Collect assignments that belong to this category #}
+      {% set cat_assigns = namespace(items=[]) %}
+      {% for a in course.assignments %}
+        {% if a.category == cat_name %}
+          {% set cat_assigns.items = cat_assigns.items + [a] %}
+        {% endif %}
+      {% endfor %}
+
+      <details class="cat-section" open>
+        <summary class="cat-header">
+          <span class="cat-name">{{ cat_name }}</span>
+          {% if cat_w.val is not none %}
+            <span class="cat-weight muted">{{ cat_w.val }}% of grade</span>
+          {% endif %}
+          {% if cat_assigns.items | length == 0 %}
+            <span class="cat-empty-badge muted small">no assignments yet</span>
+          {% else %}
+            {# Live avg shown from JS; static fallback shown server-side #}
+            {% set ns2 = namespace(e=0.0, t=0.0, has_score=false) %}
+            {% for a in cat_assigns.items %}
+              {% if a.earned is not none and a.total %}
+                {% set ns2.e = ns2.e + a.earned %}
+                {% set ns2.t = ns2.t + a.total %}
+                {% set ns2.has_score = true %}
+              {% endif %}
+            {% endfor %}
+            {% if ns2.has_score %}
+              <span class="cat-avg muted small">{{ ((ns2.e / ns2.t) * 100) | round(1) }}% avg</span>
+            {% endif %}
+          {% endif %}
+          <span class="cat-toggle-icon">▾</span>
+        </summary>
+
+        <table class="assignments" data-cat="{{ cat_name }}">
+          <thead>
+            <tr>
+              <th>Assignment</th><th>Date</th>
+              <th>Score</th><th>Max</th><th>%</th>
+              <th title="Toggle whether this assignment counts toward your projected grade">Include</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for a in course.assignments %}
+            {% if a.category == cat_name %}
+            <tr data-id="{{ loop.index0 }}"
+                data-orig-earned="{{ a.earned if a.earned is not none else '' }}"
+                data-orig-total="{{ a.total if a.total is not none else '' }}"
+                data-cat="{{ a.category }}"
+                class="{% if a.hypothetical %}hypo-row{% endif %}">
+              <td class="asgn-name">{{ a.name }}</td>
+              <td class="asgn-date muted small">{{ a.date }}</td>
+              <td>
+                <input class="score-input earned-input"
+                       type="number" min="0" step="1"
+                       value="{{ a.earned if a.earned is not none else '' }}"
+                       placeholder="—"
+                       oninput="snapStep(this)"
+                       onchange="onScoreChange(this)">
+              </td>
+              <td>
+                <input class="score-input total-input"
+                       type="number" min="1" step="1"
+                       value="{{ a.total if a.total is not none else '' }}"
+                       placeholder="—"
+                       oninput="snapStep(this)"
+                       onchange="onScoreChange(this)">
+              </td>
+              <td class="pct-cell muted">
+                {% if a.earned is not none and a.total %}
+                  {{ ((a.earned / a.total) * 100) | round(1) }}%
+                {% else %}—{% endif %}
+              </td>
+              <td style="text-align:center">
+                <input type="checkbox" class="exclude-toggle" checked
+                       title="Include in projected grade"
+                       onchange="onExcludeToggle(this)">
+              </td>
+              <td>
+                {% if a.hypothetical %}
+                <button class="btn-del" onclick="deleteRow(this)" title="Remove">✕</button>
+                {% endif %}
+              </td>
+            </tr>
+            {% endif %}
+          {% endfor %}
+          {% if cat_assigns.items | length == 0 %}
+          <tr class="empty-cat-row">
+            <td colspan="7" class="muted small" style="padding:14px 8px; font-style:italic;">
+              No assignments yet — add a hypothetical to see how this category affects your grade.
+            </td>
+          </tr>
+          {% endif %}
+          </tbody>
+        </table>
+        <button class="btn-add-cat" data-cat="{{ cat_name }}" onclick="addHypotheticalInCat(this.dataset.cat)">+ Add to {{ cat_name }}</button>
+      </details>
+    {% endfor %}
+
+  {% else %}
+  <p class="muted">No assignments or categories found for this course yet.</p>
+  {% endif %}
+</section>
+
+<!-- ── Final exam calculator ─────────────────────────────────── -->
+<section class="panel">
+  <h2>Final exam calculator</h2>
+  <p class="muted small">What score do you need on the final to hit your target overall grade?</p>
+  <div class="row">
+    <label>Target overall %<input type="number" id="desired" step="0.01" value="90" min="0" max="100"></label>
+    <label>Final weight %<input type="number" id="finalWeight" step="0.01" value="20" min="1" max="99"></label>
+    <button onclick="finalCalc()">Calculate</button>
+  </div>
+  <div class="result" id="finalResult"></div>
+</section>
+
+<!-- ── Data passed to JS ──────────────────────────────────────── -->
+<script>
+const IDX         = {{ idx }};
+const IC_PERCENT  = {{ course.percent | tojson }};   // official IC grade — never mutate
+const IC_LETTER   = {{ course.letter  | tojson }};
+
+// Seed JS with the full assignment + category data from the server
+const CATEGORIES = {{ course.categories | tojson }};
+let assignments  = {{ course.assignments | tojson }};
+
+// Mirror of assignments that JS keeps live as user edits
+let liveAssignments = assignments.map(a => Object.assign({}, a));
+let userHasEdited   = false;   // stays false until user changes a score
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function normCat(name) {
+  return (name || 'Uncategorized').trim().toLowerCase();
+}
+
+function letterGrade(pct) {
+  if (pct == null) return '';
+  if (pct >= 97) return 'A+'; if (pct >= 93) return 'A'; if (pct >= 90) return 'A-';
+  if (pct >= 87) return 'B+'; if (pct >= 83) return 'B'; if (pct >= 80) return 'B-';
+  if (pct >= 77) return 'C+'; if (pct >= 73) return 'C'; if (pct >= 70) return 'C-';
+  if (pct >= 67) return 'D+'; if (pct >= 63) return 'D'; if (pct >= 60) return 'D-'; return 'F';
+}
+
+function gradeClass(pct) {
+  if (pct == null) return '';
+  if (pct >= 90) return 'grade-good';
+  if (pct >= 80) return 'grade-ok';
+  if (pct >= 70) return 'grade-warn';
+  return 'grade-bad';
+}
+
+// ── Exclude toggle handler ─────────────────────────────────────────────────
+function onExcludeToggle(checkbox) {
+  const row = checkbox.closest('tr');
+  const idx = parseInt(row.dataset.id);
+  const excluded = !checkbox.checked;
+  liveAssignments[idx].excluded = excluded;
+  row.classList.toggle('excluded-row', excluded);
+  // Only enter projected mode if this assignment is actually graded —
+  // toggling an ungraded assignment has no effect on the calculation.
+  if (liveAssignments[idx].earned !== null) {
+    userHasEdited = true;
+  }
+  updateLiveGrade();
+}
+
+// ── Grade calculation ──────────────────────────────────────────────────────
+// Mirrors Python compute_percent exactly.
+// Returns { pct: number|null, breakdown: [{name, avg, weight, contrib}] }
+function calcGrade(items) {
+  // Case-insensitive weight lookup from CATEGORIES list
+  const catWeights = {};   // normalised name -> weight
+  CATEGORIES.forEach(c => {
+    if (c.weight != null) catWeights[normCat(c.name)] = c.weight;
+  });
+
+  // Accumulate per-category totals using normalised keys
+  const catTotals = {};   // normKey -> {name, e, t, w}
+  items.forEach(a => {
+    if (a.excluded) return;                      // skip excluded
+    if (a.earned == null || !a.total) return;   // skip ungraded
+    const raw  = (a.category || 'Uncategorized').trim();
+    const key  = raw.toLowerCase();
+    if (!catTotals[key]) {
+      // Prefer CATEGORIES weight; fall back to assignment's own weight field
+      const w = catWeights[key] != null ? catWeights[key] : (a.weight != null ? a.weight : null);
+      catTotals[key] = { name: raw, e: 0, t: 0, w };
+    }
+    catTotals[key].e += parseFloat(a.earned);
+    catTotals[key].t += parseFloat(a.total);
+  });
+
+  if (Object.keys(catTotals).length === 0) return { pct: null, breakdown: [] };
+
+  const rows = Object.values(catTotals);
+  const hasWeights = rows.some(r => r.w != null);
+
+  let pct = null;
+  const breakdown = [];
+
+  if (hasWeights) {
+    let wsum = 0, wtot = 0;
+    rows.forEach(r => {
+      const avg = r.t > 0 ? r.e / r.t : null;
+      if (r.w != null && r.t > 0) {
+        wsum += avg * r.w;
+        wtot += r.w;
+      }
+      breakdown.push({ name: r.name, avg: avg != null ? Math.round(avg * 10000) / 100 : null,
+                        weight: r.w, e: r.e, t: r.t });
+    });
+    if (wtot > 0) pct = Math.round((wsum / wtot) * 10000) / 100;
+  } else {
+    // Simple points total
+    let e = 0, t = 0;
+    rows.forEach(r => {
+      e += r.e; t += r.t;
+      breakdown.push({ name: r.name, avg: r.t > 0 ? Math.round(r.e/r.t*10000)/100 : null,
+                        weight: null, e: r.e, t: r.t });
+    });
+    if (t > 0) pct = Math.round((e / t) * 10000) / 100;
+  }
+
+  return { pct, breakdown };
+}
+
+// ── Live grade display ─────────────────────────────────────────────────────
+function updateLiveGrade() {
+  const el  = document.getElementById('liveGrade');
+  const pEl = document.getElementById('livePercent');
+  const lEl = document.getElementById('liveLetter');
+  const src = document.getElementById('gradeSource');
+
+  const deltaEl = document.getElementById('gradeDelta');
+
+  if (!userHasEdited) {
+    // Show IC's official grade unchanged
+    el.className = 'live-grade ' + gradeClass(IC_PERCENT);
+    pEl.textContent = IC_PERCENT != null ? IC_PERCENT : '—';
+    if (lEl) lEl.textContent = IC_LETTER || '';
+    if (src) src.textContent = 'from Infinite Campus';
+    if (deltaEl) { deltaEl.textContent = ''; deltaEl.className = 'grade-delta'; }
+    hideBreakdown();
+    return;
+  }
+
+  // User has modified something — show calculated projection
+  const active = liveAssignments.filter(a => !a._deleted);
+  const { pct, breakdown } = calcGrade(active);
+  el.className = 'live-grade ' + gradeClass(pct);
+  pEl.textContent = pct != null ? pct : '—';
+  if (lEl) lEl.textContent = letterGrade(pct);
+  const excludedCount = active.filter(a => a.excluded).length;
+  if (src) src.textContent = excludedCount
+    ? `projected · ${excludedCount} excluded`
+    : 'projected';
+
+  // Delta vs IC's real grade
+  if (deltaEl) {
+    if (pct != null && IC_PERCENT != null) {
+      const diff = Math.round((pct - IC_PERCENT) * 100) / 100;
+      if (diff === 0) {
+        deltaEl.textContent = '';
+        deltaEl.className = 'grade-delta';
+      } else {
+        deltaEl.textContent = (diff > 0 ? '+' : '') + diff + '%';
+        deltaEl.className = 'grade-delta ' + (diff > 0 ? 'delta-up' : 'delta-down');
+      }
+    } else {
+      deltaEl.textContent = '';
+      deltaEl.className = 'grade-delta';
+    }
+  }
+
+  showBreakdown(breakdown, pct);
+}
+
+// ── Breakdown panel ────────────────────────────────────────────────────────
+function showBreakdown(breakdown, overall) {
+  let panel = document.getElementById('breakdownPanel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'breakdownPanel';
+    panel.className = 'panel';
+    panel.style.cssText = 'margin-bottom:20px';
+    // Insert before the assignment panel
+    const ap = document.getElementById('assignmentPanel');
+    ap.parentNode.insertBefore(panel, ap);
+  }
+
+  const hasW = breakdown.some(r => r.weight != null);
+  let html = `<h2 style="margin:0 0 10px">Grade breakdown <span class="muted small" style="font-weight:400">(projected)</span></h2>
+  <table class="assignments"><thead><tr>
+    <th>Category</th><th>Earned / Total</th><th>Average</th>
+    ${hasW ? '<th>Weight</th><th>Contribution</th>' : ''}
+  </tr></thead><tbody>`;
+
+  let wsum = 0, wtot = 0;
+  breakdown.forEach(r => {
+    const avgStr = r.avg != null ? r.avg + '%' : '—';
+    const cls = r.avg != null ? gradeClass(r.avg) : '';
+    let contrib = '';
+    if (hasW && r.weight != null && r.avg != null) {
+      wsum += r.avg * r.weight;
+      wtot += r.weight;
+      contrib = `${Math.round(r.avg * r.weight / 100 * 100) / 100} pts`;
+    }
+    html += `<tr>
+      <td>${r.name}</td>
+      <td class="muted small">${r.e} / ${r.t}</td>
+      <td class="pct-cell ${cls}">${avgStr}</td>
+      ${hasW ? `<td class="muted small">${r.weight != null ? r.weight + '%' : '—'}</td><td class="muted small">${contrib}</td>` : ''}
+    </tr>`;
+  });
+
+  html += `</tbody></table>`;
+  if (hasW && wtot > 0) {
+    const note = wtot < 99.9
+      ? `<span class="muted small" style="margin-left:8px">Only graded categories included (${Math.round(wtot)}% of total weight)</span>`
+      : '';
+    html += `<div style="margin-top:10px;font-weight:600">
+      Projected overall: <span class="${gradeClass(overall)}">${overall != null ? overall + '%' : '—'}</span>
+      ${note}
+    </div>`;
+  }
+
+  panel.innerHTML = html;
+  panel.style.display = '';
+}
+
+function hideBreakdown() {
+  const panel = document.getElementById('breakdownPanel');
+  if (panel) panel.style.display = 'none';
+}
+
+// ── Row score change handler ───────────────────────────────────────────────
+function onScoreChange(input) {
+  const row = input.closest('tr');
+  const idx = parseInt(row.dataset.id);
+  const earnedEl = row.querySelector('.earned-input');
+  const totalEl  = row.querySelector('.total-input');
+  const pctEl    = row.querySelector('.pct-cell');
+
+  const earned = parseFloat(earnedEl.value);
+  const total  = parseFloat(totalEl.value);
+
+  const prevEarned = liveAssignments[idx].earned;  // before update
+  liveAssignments[idx].earned = isNaN(earned) ? null : earned;
+  liveAssignments[idx].total  = isNaN(total)  ? null : total;
+  const newEarned  = liveAssignments[idx].earned;
+
+  // Only switch to projected mode when the change actually affects the grade:
+  // i.e. when earned was set before (clearing it matters) or is set now.
+  // Changing only the total on a still-empty row has no effect on calcGrade.
+  if (prevEarned !== null || newEarned !== null) {
+    userHasEdited = true;
+  }
+
+  if (!isNaN(earned) && !isNaN(total) && total > 0) {
+    pctEl.textContent = Math.round((earned / total) * 1000) / 10 + '%';
+    pctEl.className = 'pct-cell ' + gradeClass((earned / total) * 100);
+  } else {
+    pctEl.textContent = '—';
+    pctEl.className = 'pct-cell muted';
+  }
+
+  // Mark row as modified if different from original
+  const origEarned = row.dataset.origEarned;
+  const origTotal  = row.dataset.origTotal;
+  const earnedStr  = isNaN(earned) ? '' : String(earned);
+  const totalStr   = isNaN(total)  ? '' : String(total);
+  const changed = (earnedStr !== origEarned || totalStr !== origTotal);
+  row.classList.toggle('modified', changed);
+
+  updateLiveGrade();
+}
+
+// ── Reset all changes ──────────────────────────────────────────────────────
+function resetAll() {
+  userHasEdited = false;
+  // Remove hypothetical rows from DOM
+  document.querySelectorAll('.hypo-row').forEach(r => r.remove());
+  // Reset all modified inputs and exclusion toggles to original values
+  document.querySelectorAll('tr[data-id]').forEach(row => {
+    const oe = row.dataset.origEarned;
+    const ot = row.dataset.origTotal;
+    row.querySelector('.earned-input').value = oe;
+    row.querySelector('.total-input').value  = ot;
+    row.classList.remove('modified', 'excluded-row');
+    const toggle = row.querySelector('.exclude-toggle');
+    if (toggle) toggle.checked = true;
+    const idx = parseInt(row.dataset.id);
+    liveAssignments[idx].earned   = oe === '' ? null : parseFloat(oe);
+    liveAssignments[idx].total    = ot === '' ? null : parseFloat(ot);
+    liveAssignments[idx].excluded = false;
+    const pctEl = row.querySelector('.pct-cell');
+    if (oe !== '' && ot !== '' && parseFloat(ot) > 0) {
+      pctEl.textContent = Math.round((parseFloat(oe)/parseFloat(ot))*1000)/10 + '%';
+      pctEl.className = 'pct-cell';
+    } else {
+      pctEl.textContent = '—';
+      pctEl.className = 'pct-cell muted';
+    }
+  });
+  // Rebuild liveAssignments without hypotheticals
+  liveAssignments = assignments.map(a => Object.assign({}, a));
+  updateLiveGrade();
+}
+
+// ── Add hypothetical assignment (global — picks first category) ───────────
+function addHypothetical() {
+  // Pick the first category that has a graded assignment, or fall back to first in CATEGORIES
+  const firstCat = liveAssignments.find(a => a.category);
+  const cat = firstCat ? firstCat.category : (CATEGORIES.length ? CATEGORIES[0].name : 'Uncategorized');
+  addHypotheticalInCat(cat);
+}
+
+// ── Add hypothetical to a specific category ────────────────────────────────
+function addHypotheticalInCat(catName) {
+  userHasEdited = true;
+  // Find the table for this category
+  const tables = document.querySelectorAll(`table[data-cat="${CSS.escape(catName)}"]`);
+  const table  = tables.length ? tables[0] : document.querySelector('.assignments');
+  if (!table) { alert('No assignment table found.'); return; }
+
+  const newIdx = liveAssignments.length;
+  // Resolve weight: check CATEGORIES with case-insensitive match
+  const normName = normCat(catName);
+  const catObj = CATEGORIES.find(c => normCat(c.name) === normName);
+  const catWeight = catObj ? catObj.weight : null;
+  liveAssignments.push({ name: 'Hypothetical', earned: null, total: 100,
+                          category: catName, weight: catWeight, date: '', hypothetical: true });
+
+  const tr = document.createElement('tr');
+  tr.dataset.id  = newIdx;
+  tr.dataset.origEarned = '';
+  tr.dataset.origTotal  = '100';
+  tr.dataset.cat = catName;
+  tr.className   = 'hypo-row';
+  tr.innerHTML = `
+    <td><input class="name-input" type="text" placeholder="Assignment name" value="Hypothetical"
+               oninput="liveAssignments[${newIdx}].name=this.value"></td>
+    <td class="muted small">—</td>
+    <td><input class="score-input earned-input" type="number" min="0" step="1" placeholder="Score"
+               oninput="snapStep(this)" onchange="onScoreChange(this)"></td>
+    <td><input class="score-input total-input" type="number" min="1" step="1" value="100"
+               oninput="snapStep(this)" onchange="onScoreChange(this)"></td>
+    <td class="pct-cell muted">—</td>
+    <td style="text-align:center"><input type="checkbox" class="exclude-toggle" checked
+         title="Include in projected grade" onchange="onExcludeToggle(this)"></td>
+    <td><button class="btn-del" onclick="deleteRow(this)" title="Remove">✕</button></td>
+  `;
+  table.querySelector('tbody').appendChild(tr);
+  initScoreInputs();
+  tr.querySelector('.earned-input').focus();
+}
+
+// ── Delete a hypothetical row ──────────────────────────────────────────────
+function deleteRow(btn) {
+  const row = btn.closest('tr');
+  const idx = parseInt(row.dataset.id);
+  liveAssignments[idx].earned = null;
+  liveAssignments[idx].total  = null;
+  liveAssignments[idx]._deleted = true;
+  row.remove();
+  updateLiveGrade();
+}
+
+// ── Final exam calculator ──────────────────────────────────────────────────
+async function finalCalc() {
+  const desired = parseFloat(document.getElementById('desired').value);
+  const weight  = parseFloat(document.getElementById('finalWeight').value);
+  const { pct: current } = calcGrade(liveAssignments.filter(a => !a._deleted));
+  const useCurrent = current != null ? current : IC_PERCENT;
+  const body = { desired, weight, current: useCurrent,
+                 assignments: liveAssignments.filter(a => !a._deleted),
+                 categories: CATEGORIES };
+  const r  = await fetch(`/course/${IDX}/final`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const j  = await r.json();
+  const el = document.getElementById('finalResult');
+  if (j.error) { el.textContent = '⚠ ' + j.error; el.className = 'result err'; return; }
+  const color = j.needed > 100 ? ' err' : ' ok';
+  el.textContent = `Current: ${j.current}% — you need ${j.needed}% on the final.`;
+  el.className   = 'result' + color;
+}
+
+// ── Spinner snap — keeps exact IC values, forces clean ±1 arrow steps ─────
+// When the browser steps a non-integer value (e.g. 47.5 with step=1) it snaps
+// to the nearest boundary (48) instead of adding exactly 1. We detect that
+// fractional delta and push the value a full unit from where it was.
+function snapStep(input) {
+  const prev = input._prev;
+  const curr = parseFloat(input.value);
+  // Guard: prev must be a real number — null coerces to 0 in JS arithmetic
+  // which would wrongly snap a freshly-typed 0.5 into 1.
+  if (prev !== null && prev !== undefined && !isNaN(prev) && !isNaN(curr)) {
+    const d = curr - prev;
+    if (d !== 0 && Math.abs(d) < 1) {
+      input.value = d > 0 ? prev + 1 : prev - 1;
+    }
+  }
+  input._prev = isNaN(parseFloat(input.value)) ? null : parseFloat(input.value);
+}
+
+function initScoreInputs() {
+  document.querySelectorAll('.score-input').forEach(el => {
+    el._prev = el.value !== '' ? parseFloat(el.value) : null;
+  });
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+initScoreInputs();
+updateLiveGrade();
+</script>
+{% endblock %}
