@@ -16,7 +16,7 @@ IC_DISTRICT_SEARCH = "https://mobile.infinitecampus.com/api/district/searchDistr
 STORE = {}
 
 
-# ── helpers ──────────────────────────────────────────────────────────────────
+#  helpers
 
 def _sid():
     if "sid" not in session:
@@ -124,7 +124,7 @@ def _resolve_semester_range(ic_terms):
     return _current_semester_range()
 
 
-# ── auth ─────────────────────────────────────────────────────────────────────
+# auth login shi
 
 def ic_login(username, password, base_url, app_name):
     """
@@ -187,7 +187,7 @@ def ic_login(username, password, base_url, app_name):
     return s, base_url, app_name, None
 
 
-# ── grade fetching ────────────────────────────────────────────────────────────
+#  grade fetching 
 
 def _best_task(grading_tasks):
     """
@@ -238,7 +238,7 @@ def fetch_grades(s: requests.Session, base_url=None, app_name=None):
 
     enrollment = data[0]  # single student
 
-    # ── Pull personID + calendarID from the grading task data ──
+    #  Pull personID + calendarID from the grading task data 
     person_id   = None
     calendar_id = enrollment.get("calendarID")
     for term in enrollment.get("terms", []):
@@ -255,7 +255,7 @@ def fetch_grades(s: requests.Session, base_url=None, app_name=None):
         if person_id:
             break
 
-    # ── Fetch ALL assignment marks for this student in one call ──
+    #  Fetch ALL assignment marks for this student in one call 
     # Endpoint: /campus/resources/section/teacherSections/assignmentMark
     # Returns a flat list of mark objects; we index them by assignmentID.
     marks_by_id = {}
@@ -283,7 +283,7 @@ def fetch_grades(s: requests.Session, base_url=None, app_name=None):
         except Exception:
             pass  # marks unavailable; assignments will show without scores
 
-    # ── Walk terms newest-first; build one entry per unique sectionID ──
+    #  Walk terms newest-first; build one entry per unique sectionID 
     terms_raw = sorted(
         enrollment.get("terms", []),
         key=lambda t: t.get("termSeq", 0),
@@ -335,7 +335,7 @@ def fetch_grades(s: requests.Session, base_url=None, app_name=None):
                 "term_history": [],        # filled below
             })
 
-    # ── Build per-course term history (all terms, newest first) ──
+    #  Build per-course term history (all terms, newest first) 
     # Index by section_id for fast lookup
     course_map = {c["section_id"]: c for c in courses}
 
@@ -372,7 +372,7 @@ def fetch_grades(s: requests.Session, base_url=None, app_name=None):
             "termName":  term.get("termName", ""),
         })
 
-    # ── Fetch individual assignments for every course ──
+    #  Fetch individual assignments for every course 
     for c in courses:
         assignments, categories = _fetch_assignments(
             s, c, marks_by_id,
@@ -411,7 +411,7 @@ def _parse_detail_response(body, marks_by_id):
 
     Returns (assignments, categories) or None if structure not recognised.
     """
-    # ── Shape A: Dublin USD details[] wrapper ─────────────────────────────────
+    #  Shape A: Dublin USD details[] wrapper ─
     if isinstance(body, dict) and body.get("details"):
         details = body["details"]
         if not isinstance(details, list):
@@ -467,7 +467,7 @@ def _parse_detail_response(body, marks_by_id):
         assignments.sort(key=lambda x: x["date"], reverse=True)
         return assignments, categories
 
-    # ── Shape B / C: data[] or Task[] (categories-first, assignments nested) ──
+    #  Shape B / C: data[] or Task[] (categories-first, assignments nested) 
     if isinstance(body, dict):
         inner = (body.get("data") or body.get("categories") or
                  body.get("Task") or body.get("tasks") or [])
@@ -560,7 +560,7 @@ def _fetch_assignments(s, course, marks_by_id=None, calendar_id=None, person_id=
     BASE = _raw[:-7] if _raw.endswith("/campus") else _raw
     app_name = app_name or "dublin"
 
-    # ── Supplemental categories (always fetch — gives us empty categories too) ──
+    #  Supplemental categories (always fetch — gives us empty categories too) 
     # We'll merge these in as a safety net regardless of which path succeeds.
     sup_cats  = {}   # canonical_name → weight  (insertion order = IC display order)
     sup_lower = {}   # lower(name) → canonical_name
@@ -591,7 +591,7 @@ def _fetch_assignments(s, course, marks_by_id=None, calendar_id=None, person_id=
     except Exception:
         pass
 
-    # ── Path 1 + 2 + 3: detail endpoints (categories-first, assignments nested) ──
+    #  Path 1 + 2 + 3: detail endpoints (categories-first, assignments nested) 
     detail_endpoints = [
         # Dublin USD specific: uses scoreID from the grading task, not sectionID.
         # Response shape: { details: [{ categories: [{ groupID, name, weight,
@@ -642,7 +642,7 @@ def _fetch_assignments(s, course, marks_by_id=None, calendar_id=None, person_id=
         except Exception:
             continue
 
-    # ── Path 4 (byDateRange fallback) ─────────────────────────────────────────
+    #  Path 4 (byDateRange fallback) ─
     # byDateRange returns assignments with NO categoryID/categoryName — only a
     # groupActivityID that links to the section-level assignment record.
     # We build a groupActivityID→category map by fetching the section's group
@@ -729,7 +729,7 @@ def _fetch_assignments(s, course, marks_by_id=None, calendar_id=None, person_id=
         total = _num(a.get("totalPoints") or a.get("pointsPossible"))
         date  = a.get("dueDate") or a.get("assignedDate") or ""
 
-        # ── Category resolution — try every possible source ───────────────────
+        #  Category resolution — try every possible source ─
         cat  = None
         mark = {}   # may be populated in step 4; initialised here so earned lookup below is safe
 
@@ -805,7 +805,7 @@ def _fetch_assignments(s, course, marks_by_id=None, calendar_id=None, person_id=
     return assignments, all_cats
 
 
-# ── GPA calculation ───────────────────────────────────────────────────────────
+#  GPA calculation ─
 
 def _detect_course_type(name):
     u = name.upper()
@@ -888,7 +888,7 @@ def compute_gpa(courses):
     }
 
 
-# ── grade simulation math ─────────────────────────────────────────────────────
+#  grade simulation math ─
 
 def compute_percent(course, extra_assignment=None):
     """
@@ -963,7 +963,7 @@ def compute_percent(course, extra_assignment=None):
     return round((e / t) * 100, 2) if t else None
 
 
-# ── routes ────────────────────────────────────────────────────────────────────
+#  routes 
 
 @app.route("/")
 def index():
