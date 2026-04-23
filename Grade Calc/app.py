@@ -817,32 +817,32 @@ def _detect_course_type(name):
 
 
 def _pct_to_letter(pct):
-    if pct >= 97: return "A+"
-    if pct >= 93: return "A"
-    if pct >= 90: return "A-"
-    if pct >= 87: return "B+"
-    if pct >= 83: return "B"
-    if pct >= 80: return "B-"
-    if pct >= 77: return "C+"
-    if pct >= 73: return "C"
-    if pct >= 70: return "C-"
-    if pct >= 67: return "D+"
-    if pct >= 63: return "D"
-    if pct >= 60: return "D-"
+    if pct >= 96.5: return "A+"
+    if pct >= 92.5: return "A"
+    if pct >= 89.5: return "A-"
+    if pct >= 86.5: return "B+"
+    if pct >= 82.5: return "B"
+    if pct >= 79.5: return "B-"
+    if pct >= 76.5: return "C+"
+    if pct >= 72.5: return "C"
+    if pct >= 69.5: return "C-"
+    if pct >= 66.5: return "D+"
+    if pct >= 62.6: return "D"
+    if pct >= 59.5: return "D-"
     return "F"
 
 
 def _letter_to_gpa(letter, course_type="STANDARD"):
     base = {
-        "A+": 4.0, "A": 4.0, "A-": 3.7,
-        "B+": 3.3, "B": 3.0, "B-": 2.7,
-        "C+": 2.3, "C": 2.0, "C-": 1.7,
-        "D+": 1.3, "D": 1.0, "D-": 0.7,
+        "A+": 4.0, "A": 4.0, "A-": 4.0,
+        "B+": 3.0, "B": 3.0, "B-": 3.0,
+        "C+": 2.0, "C": 2.0, "C-": 2.0,
+        "D+": 1.0, "D": 1.0, "D-": 1.0,
         "F":  0.0,
     }
     pts   = base.get(letter, 0.0)
     boost = (1.0 if course_type in ("AP", "DUAL_ENROLLMENT")
-             else 0.5 if course_type == "HONORS"
+             else 1.0 if course_type == "HONORS"
              else 0.0)
     return min(pts + boost, 5.0) if pts > 0 else 0.0
 
@@ -851,7 +851,7 @@ def compute_gpa(courses):
     """
     Compute weighted and unweighted GPA across all courses that have a grade.
     Each course is treated as 1 credit (equal weight).
-    Weighted GPA adds +1.0 for AP, +0.5 for Honors, per Vela / Dublin USD convention.
+    Weighted GPA adds +1.0 for AP and Honors, per Dublin USD convention.
     """
     breakdown   = []
     w_total     = 0.0
