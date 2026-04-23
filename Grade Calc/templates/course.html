@@ -37,7 +37,7 @@
 </section>
 {% endif %}
 
-<!-- ── Assignment editor ─────────────────────────────────────── -->
+<!--  Assignment editor ─ -->
 <section class="panel" id="assignmentPanel">
   <div class="panel-head">
     <h2>Assignments</h2>
@@ -176,7 +176,7 @@
   {% endif %}
 </section>
 
-<!-- ── Final exam calculator ─────────────────────────────────── -->
+<!--  Final exam calculator ─ -->
 <section class="panel">
   <h2>Final exam calculator</h2>
   <p class="muted small">What score do you need on the final to hit your target overall grade?</p>
@@ -188,7 +188,7 @@
   <div class="result" id="finalResult"></div>
 </section>
 
-<!-- ── Data passed to JS ──────────────────────────────────────── -->
+<!--  Data passed to JS  -->
 <script>
 const IDX         = {{ idx }};
 const IC_PERCENT  = {{ course.percent | tojson }};   // official IC grade — never mutate
@@ -202,7 +202,7 @@ let assignments  = {{ course.assignments | tojson }};
 let liveAssignments = assignments.map(a => Object.assign({}, a));
 let userHasEdited   = false;   // stays false until user changes a score
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+//  Helpers 
 function normCat(name) {
   return (name || 'Uncategorized').trim().toLowerCase();
 }
@@ -223,7 +223,7 @@ function gradeClass(pct) {
   return 'grade-bad';
 }
 
-// ── Exclude toggle handler ─────────────────────────────────────────────────
+//  Exclude toggle handler ─
 function onExcludeToggle(checkbox) {
   const row = checkbox.closest('tr');
   const idx = parseInt(row.dataset.id);
@@ -238,7 +238,7 @@ function onExcludeToggle(checkbox) {
   updateLiveGrade();
 }
 
-// ── Grade calculation ──────────────────────────────────────────────────────
+//  Grade calculation 
 // Mirrors Python compute_percent exactly.
 // Returns { pct: number|null, breakdown: [{name, avg, weight, contrib}] }
 function calcGrade(items) {
@@ -298,7 +298,7 @@ function calcGrade(items) {
   return { pct, breakdown };
 }
 
-// ── Live grade display ─────────────────────────────────────────────────────
+//  Live grade display ─
 function updateLiveGrade() {
   const el  = document.getElementById('liveGrade');
   const pEl = document.getElementById('livePercent');
@@ -349,7 +349,7 @@ function updateLiveGrade() {
   showBreakdown(breakdown, pct);
 }
 
-// ── Breakdown panel ────────────────────────────────────────────────────────
+//  Breakdown panel 
 function showBreakdown(breakdown, overall) {
   let panel = document.getElementById('breakdownPanel');
   if (!panel) {
@@ -407,7 +407,7 @@ function hideBreakdown() {
   if (panel) panel.style.display = 'none';
 }
 
-// ── Row score change handler ───────────────────────────────────────────────
+//  Row score change handler ─
 function onScoreChange(input) {
   const row = input.closest('tr');
   const idx = parseInt(row.dataset.id);
@@ -449,7 +449,7 @@ function onScoreChange(input) {
   updateLiveGrade();
 }
 
-// ── Reset all changes ──────────────────────────────────────────────────────
+//  Reset all changes 
 function resetAll() {
   userHasEdited = false;
   // Remove hypothetical rows from DOM
@@ -481,7 +481,7 @@ function resetAll() {
   updateLiveGrade();
 }
 
-// ── Add hypothetical assignment (global — picks first category) ───────────
+//  Add hypothetical assignment (global — picks first category) ─
 function addHypothetical() {
   // Pick the first category that has a graded assignment, or fall back to first in CATEGORIES
   const firstCat = liveAssignments.find(a => a.category);
@@ -489,7 +489,7 @@ function addHypothetical() {
   addHypotheticalInCat(cat);
 }
 
-// ── Add hypothetical to a specific category ────────────────────────────────
+//  Add hypothetical to a specific category 
 function addHypotheticalInCat(catName) {
   userHasEdited = true;
   // Find the table for this category
@@ -529,7 +529,7 @@ function addHypotheticalInCat(catName) {
   tr.querySelector('.earned-input').focus();
 }
 
-// ── Delete a hypothetical row ──────────────────────────────────────────────
+//  Delete a hypothetical row 
 function deleteRow(btn) {
   const row = btn.closest('tr');
   const idx = parseInt(row.dataset.id);
@@ -540,7 +540,7 @@ function deleteRow(btn) {
   updateLiveGrade();
 }
 
-// ── Final exam calculator ──────────────────────────────────────────────────
+//  Final exam calculator 
 async function finalCalc() {
   const desired = parseFloat(document.getElementById('desired').value);
   const weight  = parseFloat(document.getElementById('finalWeight').value);
@@ -561,7 +561,7 @@ async function finalCalc() {
   el.className   = 'result' + color;
 }
 
-// ── Spinner snap — keeps exact IC values, forces clean ±1 arrow steps ─────
+//  Spinner snap — keeps exact IC values, forces clean ±1 arrow steps ─
 // When the browser steps a non-integer value (e.g. 47.5 with step=1) it snaps
 // to the nearest boundary (48) instead of adding exactly 1. We detect that
 // fractional delta and push the value a full unit from where it was.
@@ -585,7 +585,7 @@ function initScoreInputs() {
   });
 }
 
-// ── Init ───────────────────────────────────────────────────────────────────
+//  Init ─
 initScoreInputs();
 updateLiveGrade();
 </script>
