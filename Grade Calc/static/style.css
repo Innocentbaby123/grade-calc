@@ -34,7 +34,7 @@ html, body {
 a { color: var(--accent); text-decoration: none; }
 a:hover { color: var(--accent-2); }
 
-/* ── Topbar ──────────────────────────────────────────────────────── */
+/*  Topbar */
 .topbar {
   display: flex; justify-content: space-between; align-items: center;
   padding: 0 32px;
@@ -55,7 +55,7 @@ a:hover { color: var(--accent-2); }
 }
 .topbar nav a:hover { color: var(--fg); background: var(--bg-3); text-decoration: none; }
 
-/* ── Layout ──────────────────────────────────────────────────────── */
+/*  Layout  */
 .container { max-width: 1140px; margin: 36px auto; padding: 0 28px; }
 
 h1 { margin: 0 0 6px; font-size: 28px; font-weight: 700; letter-spacing: -0.4px; line-height: 1.2; }
@@ -74,7 +74,7 @@ h2 { margin: 0 0 14px; font-size: 16px; font-weight: 600; letter-spacing: -0.2px
   font-size: 14px;
 }
 
-/* ── Cards / Panels ──────────────────────────────────────────────── */
+/*  Cards / Panels  */
 .card {
   background: var(--bg-2);
   border: 1px solid var(--border-2);
@@ -94,7 +94,7 @@ h2 { margin: 0 0 14px; font-size: 16px; font-weight: 600; letter-spacing: -0.2px
   box-shadow: var(--shadow);
 }
 
-/* ── Login ───────────────────────────────────────────────────────── */
+/*  Login ─ */
 .login-card h1 { text-align: center; font-size: 26px; margin-bottom: 4px; }
 .login-card .subtitle { text-align: center; color: var(--muted); font-size: 14px; margin-bottom: 20px; }
 .login-card form { display: flex; flex-direction: column; gap: 14px; margin-top: 4px; }
@@ -116,7 +116,7 @@ h2 { margin: 0 0 14px; font-size: 16px; font-weight: 600; letter-spacing: -0.2px
   box-shadow: 0 0 0 3px rgba(77,158,255,0.15);
 }
 
-/* ── District search ─────────────────────────────────────────────── */
+/*  District search ─ */
 .district-wrap { position: relative; margin-top: 6px; }
 .district-wrap input { width: 100%; margin-top: 0; }
 .district-dropdown {
@@ -150,7 +150,7 @@ h2 { margin: 0 0 14px; font-size: 16px; font-weight: 600; letter-spacing: -0.2px
 }
 .district-confirm.hidden { display: none; }
 
-/* ── Buttons ─────────────────────────────────────────────────────── */
+/*  Buttons ─ */
 button {
   background: var(--accent);
   color: #050810;
@@ -241,7 +241,7 @@ button:disabled { opacity: 0.35; cursor: not-allowed; transform: none; filter: n
 
 .btn-small { padding: 8px 16px; font-size: 12px; font-weight: 700; }
 
-/* ── Dashboard grid ──────────────────────────────────────────────── */
+/*  Dashboard grid  */
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -280,7 +280,7 @@ button:disabled { opacity: 0.35; cursor: not-allowed; transform: none; filter: n
 .grade-bad { border-left-color: var(--bad) !important; }
 .grade-bad .course-grade { color: var(--bad); }
 
-/* ── Course header ───────────────────────────────────────────────── */
+/*  Course header ─ */
 .back {
   display: inline-flex; align-items: center; gap: 6px;
   margin-bottom: 20px; color: var(--muted); font-size: 14px; font-weight: 500;
@@ -331,7 +331,7 @@ button:disabled { opacity: 0.35; cursor: not-allowed; transform: none; filter: n
 .current-grade.grade-warn { color: var(--warn); }
 .current-grade.grade-bad  { color: var(--bad); }
 
-/* ── Assignment panel ────────────────────────────────────────────── */
+/*  Assignment panel  */
 .panel-head {
   display: flex; justify-content: space-between; align-items: center;
   margin-bottom: 16px;
@@ -339,7 +339,7 @@ button:disabled { opacity: 0.35; cursor: not-allowed; transform: none; filter: n
 .panel-head h2 { margin: 0; }
 .panel-actions { display: flex; gap: 8px; }
 
-/* ── Category sections ───────────────────────────────────────────── */
+/*  Category sections ─ */
 details.cat-section {
   border-top: 1px solid var(--border);
   margin-top: 4px;
@@ -371,7 +371,7 @@ details.cat-section summary:hover { background: rgba(255,255,255,0.03); }
 details.cat-section:not([open]) .cat-toggle-icon { transform: rotate(-90deg); }
 details.cat-section[open] .cat-toggle-icon { transform: rotate(0deg); }
 
-/* ── Assignments table ───────────────────────────────────────────── */
+/*  Assignments table ─ */
 table.assignments { width: 100%; border-collapse: collapse; }
 table.assignments th, table.assignments td {
   text-align: left;
@@ -393,7 +393,7 @@ tr.hypo-row td:first-child { font-style: normal; }
 tr.excluded-row td { opacity: 0.38; }
 tr.excluded-row .asgn-name { text-decoration: line-through; }
 
-/* ── Exclude toggle ──────────────────────────────────────────────── */
+/*  Exclude toggle  */
 .exclude-toggle {
   appearance: none; -webkit-appearance: none;
   width: 36px; height: 20px;
@@ -449,7 +449,7 @@ tr.excluded-row .asgn-name { text-decoration: line-through; }
 .pct-cell.grade-warn { color: var(--warn); }
 .pct-cell.grade-bad  { color: var(--bad); }
 
-/* ── Final / simulator rows ──────────────────────────────────────── */
+/*  Final / simulator rows  */
 .row {
   display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end;
 }
@@ -473,7 +473,7 @@ tr.excluded-row .asgn-name { text-decoration: line-through; }
 .result.ok  { color: var(--good); }
 .result.err { color: var(--bad); }
 
-/* ── Term history ────────────────────────────────────────────────── */
+/*  Term history  */
 .term-grid { display: flex; flex-wrap: wrap; gap: 12px; }
 .term-card {
   background: var(--bg-3);
@@ -498,7 +498,7 @@ tr.excluded-row .asgn-name { text-decoration: line-through; }
 .term-letter { font-size: 13px; font-weight: 600; color: var(--muted); }
 .term-pts    { margin-top: 5px; font-size: 12px; color: var(--muted); }
 
-/* ── GPA banner ──────────────────────────────────────────────────── */
+/*  GPA banner  */
 .gpa-banner {
   display: flex;
   align-items: flex-start;
@@ -562,7 +562,7 @@ tr.excluded-row .asgn-name { text-decoration: line-through; }
 }
 .course-type-badge { margin-left: 6px; }
 
-/* ── Debug / pre ─────────────────────────────────────────────────── */
+/*  Debug / pre ─ */
 pre {
   background: var(--bg-3); color: var(--fg);
   padding: 14px; border-radius: var(--radius-sm);
