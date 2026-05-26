@@ -209,17 +209,17 @@ function normCat(name) {
 
 function letterGrade(pct) {
   if (pct == null) return '';
-  if (pct >= 97) return 'A+'; if (pct >= 93) return 'A'; if (pct >= 90) return 'A-';
-  if (pct >= 87) return 'B+'; if (pct >= 83) return 'B'; if (pct >= 80) return 'B-';
-  if (pct >= 77) return 'C+'; if (pct >= 73) return 'C'; if (pct >= 70) return 'C-';
-  if (pct >= 67) return 'D+'; if (pct >= 63) return 'D'; if (pct >= 60) return 'D-'; return 'F';
+  if (pct >= 96.5) return 'A+'; if (pct >= 92.5) return 'A'; if (pct >= 89.5) return 'A-';
+  if (pct >= 86.5) return 'B+'; if (pct >= 82.5) return 'B'; if (pct >= 79.5) return 'B-';
+  if (pct >= 76.5) return 'C+'; if (pct >= 72.5) return 'C'; if (pct >= 69.5) return 'C-';
+  if (pct >= 66.5) return 'D+'; if (pct >= 62.5) return 'D'; if (pct >= 59.5) return 'D-'; return 'F';
 }
 
 function gradeClass(pct) {
   if (pct == null) return '';
-  if (pct >= 90) return 'grade-good';
-  if (pct >= 80) return 'grade-ok';
-  if (pct >= 70) return 'grade-warn';
+  if (pct >= 89.5) return 'grade-good';
+  if (pct >= 79.5) return 'grade-ok';
+  if (pct >= 69.5) return 'grade-warn';
   return 'grade-bad';
 }
 
