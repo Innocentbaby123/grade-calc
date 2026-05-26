@@ -6,9 +6,9 @@
   {% if error %}<div class="error">{{ error }}</div>{% endif %}
   <form method="post" id="login-form">
     <!-- District search -->
-    <label>School / District
+    <label>School District
       <div class="district-wrap">
-        <input id="district-search" type="text" placeholder="Search your school or district…"
+        <input id="district-search" type="text" placeholder="Search your school's district(city)…"
                autocomplete="off" value="{{ district_name or '' }}">
         <div id="district-results" class="district-dropdown"></div>
       </div>
