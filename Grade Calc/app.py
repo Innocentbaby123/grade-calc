@@ -950,14 +950,10 @@ def compute_percent(course, extra_assignment=None):
     if has_weights:
         wsum = 0.0
         wtot = 0.0
-        # Include ALL known categories in denominator, not just graded ones
-        all_cat_weights = {c["name"].strip().lower(): c["weight"]
-                           for c in categories if c.get("weight") is not None}
-        for norm, w in all_cat_weights.items():
-            wtot += w
         for v in cat_totals.values():
             if v["w"] is not None and v["t"] > 0:
                 wsum += (v["e"] / v["t"]) * v["w"]
+                wtot += v["w"]
         if wtot > 0:
             return round((wsum / wtot) * 100, 2)
 
