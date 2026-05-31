@@ -286,6 +286,7 @@ function calcGrade(items) {
       breakdown.push({ name: r.name, avg: avg != null ? Math.round(avg * 10000) / 100 : null,
                         weight: r.w, e: r.e, t: r.t });
     });
+    console.log('CATEGORIES', CATEGORIES, 'wsum', wsum, 'wtot', wtot);
     if (wtot > 0) pct = Math.round((wsum / wtot) * 10000) / 100;
   } else {
     // Simple points total
