@@ -274,19 +274,15 @@ function calcGrade(items) {
 
   if (hasWeights) {
     let wsum = 0, wtot = 0;
-    // Sum ALL known category weights for denominator, not just graded ones
-    CATEGORIES.forEach(c => {
-      if (c.weight != null) wtot += c.weight;
-    });
     rows.forEach(r => {
       const avg = r.t > 0 ? r.e / r.t : null;
       if (r.w != null && r.t > 0) {
         wsum += avg * r.w;
+        wtot += r.w;
       }
       breakdown.push({ name: r.name, avg: avg != null ? Math.round(avg * 10000) / 100 : null,
                         weight: r.w, e: r.e, t: r.t });
     });
-    console.log('CATEGORIES', CATEGORIES, 'wsum', wsum, 'wtot', wtot);
     if (wtot > 0) pct = Math.round((wsum / wtot) * 10000) / 100;
   } else {
     // Simple points total
