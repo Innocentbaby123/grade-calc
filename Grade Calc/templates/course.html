@@ -47,11 +47,6 @@
     </div>
   </div>
 
-  {#
-    Build the master category order:
-      1. All categories from course.categories (includes empty ones like Finals)
-      2. Then any assignment categories not already in that list (orphans / unknown cats)
-  #}
   {% set ns = namespace(cats_ordered=[], cats_lower=[]) %}
   {% for cat in course.categories %}
     {% set ns.cats_ordered = ns.cats_ordered + [cat.name] %}
@@ -66,13 +61,11 @@
 
   {% if ns.cats_ordered %}
     {% for cat_name in ns.cats_ordered %}
-      {# Find weight for this category #}
       {% set cat_w = namespace(val=none) %}
       {% for cat in course.categories %}
         {% if cat.name == cat_name %}{% set cat_w.val = cat.weight %}{% endif %}
       {% endfor %}
 
-      {# Collect assignments that belong to this category #}
       {% set cat_assigns = namespace(items=[]) %}
       {% for a in course.assignments %}
         {% if a.category == cat_name %}
@@ -89,7 +82,6 @@
           {% if cat_assigns.items | length == 0 %}
             <span class="cat-empty-badge muted small">no assignments yet</span>
           {% else %}
-            {# Live avg shown from JS; static fallback shown server-side #}
             {% set ns2 = namespace(e=0.0, t=0.0, has_score=false) %}
             {% for a in cat_assigns.items %}
               {% if a.earned is not none and a.total %}
@@ -190,19 +182,21 @@
 
 <!--  Data passed to JS  -->
 <script>
-const IDX         = {{ idx }};
-const IC_PERCENT  = {{ course.percent | tojson }};   // official IC grade — never mutate
-const IC_LETTER   = {{ course.letter  | tojson }};
+const IDX          = {{ idx }};
+const IC_PERCENT   = {{ course.percent       | tojson }};
+const IC_LETTER    = {{ course.letter        | tojson }};
+const IC_EARNED    = {{ course.earned        | tojson }};
+const IC_TOTAL     = {{ course.total         | tojson }};
+// CHANGE 5: pass group_weighted flag to JS
+const GROUP_WEIGHTED = {{ course.group_weighted | tojson }};
 
-// Seed JS with the full assignment + category data from the server
 const CATEGORIES = {{ course.categories | tojson }};
 let assignments  = {{ course.assignments | tojson }};
 
-// Mirror of assignments that JS keeps live as user edits
 let liveAssignments = assignments.map(a => Object.assign({}, a));
-let userHasEdited   = false;   // stays false until user changes a score
+let userHasEdited   = false;
 
-//  Helpers 
+//  Helpers
 function normCat(name) {
   return (name || 'Uncategorized').trim().toLowerCase();
 }
@@ -223,40 +217,49 @@ function gradeClass(pct) {
   return 'grade-bad';
 }
 
-//  Exclude toggle handler ─
+//  Exclude toggle handler
 function onExcludeToggle(checkbox) {
   const row = checkbox.closest('tr');
   const idx = parseInt(row.dataset.id);
   const excluded = !checkbox.checked;
   liveAssignments[idx].excluded = excluded;
   row.classList.toggle('excluded-row', excluded);
-  // Only enter projected mode if this assignment is actually graded —
-  // toggling an ungraded assignment has no effect on the calculation.
   if (liveAssignments[idx].earned !== null) {
     userHasEdited = true;
   }
   updateLiveGrade();
 }
 
-//  Grade calculation 
-// Mirrors Python compute_percent exactly.
-// Returns { pct: number|null, breakdown: [{name, avg, weight, contrib}] }
+// CHANGE 6: calcGrade uses GROUP_WEIGHTED to pick total-points vs weighted-category
 function calcGrade(items) {
-  // Case-insensitive weight lookup from CATEGORIES list
-  const catWeights = {};   // normalised name -> weight
+  const catWeights = {};
   CATEGORIES.forEach(c => {
     if (c.weight != null) catWeights[normCat(c.name)] = c.weight;
   });
 
-  // Accumulate per-category totals using normalised keys
-  const catTotals = {};   // normKey -> {name, e, t, w}
-  items.forEach(a => {
-    if (a.excluded) return;                      // skip excluded
-    if (a.earned == null || !a.total) return;   // skip ungraded
-    const raw  = (a.category || 'Uncategorized').trim();
-    const key  = raw.toLowerCase();
+  const graded = items.filter(a => !a.excluded && !a._deleted && a.earned != null && a.total);
+
+  if (!graded.length) return { pct: null, breakdown: [] };
+
+  const breakdown = [];
+
+  if (!GROUP_WEIGHTED) {
+    // Total points mode — matches IC groupWeighted:false
+    let e = 0, t = 0;
+    graded.forEach(a => {
+      e += parseFloat(a.earned);
+      t += parseFloat(a.total);
+    });
+    const pct = t > 0 ? Math.round((e / t) * 10000) / 100 : null;
+    return { pct, breakdown };
+  }
+
+  // Weighted category mode — matches IC groupWeighted:true
+  const catTotals = {};
+  graded.forEach(a => {
+    const raw = (a.category || 'Uncategorized').trim();
+    const key = raw.toLowerCase();
     if (!catTotals[key]) {
-      // Prefer CATEGORIES weight; fall back to assignment's own weight field
       const w = catWeights[key] != null ? catWeights[key] : (a.weight != null ? a.weight : null);
       catTotals[key] = { name: raw, e: 0, t: 0, w };
     }
@@ -264,51 +267,33 @@ function calcGrade(items) {
     catTotals[key].t += parseFloat(a.total);
   });
 
-  if (Object.keys(catTotals).length === 0) return { pct: null, breakdown: [] };
-
-  const rows = Object.values(catTotals);
-  const hasWeights = rows.some(r => r.w != null);
-
-  let pct = null;
-  const breakdown = [];
-
-  if (hasWeights) {
-    let wsum = 0, wtot = 0;
-    rows.forEach(r => {
-      const avg = r.t > 0 ? r.e / r.t : null;
-      if (r.w != null && r.t > 0) {
-        wsum += avg * r.w;
-        wtot += r.w;
-      }
-      breakdown.push({ name: r.name, avg: avg != null ? Math.round(avg * 10000) / 100 : null,
-                        weight: r.w, e: r.e, t: r.t });
+  let wsum = 0, wtot = 0;
+  Object.values(catTotals).forEach(r => {
+    const avg = r.t > 0 ? r.e / r.t : null;
+    if (r.w != null && r.t > 0) {
+      wsum += avg * r.w;
+      wtot += r.w;
+    }
+    breakdown.push({
+      name: r.name,
+      avg: avg != null ? Math.round(avg * 10000) / 100 : null,
+      weight: r.w, e: r.e, t: r.t
     });
-    if (wtot > 0) pct = Math.round((wsum / wtot) * 10000) / 100;
-  } else {
-    // Simple points total
-    let e = 0, t = 0;
-    rows.forEach(r => {
-      e += r.e; t += r.t;
-      breakdown.push({ name: r.name, avg: r.t > 0 ? Math.round(r.e/r.t*10000)/100 : null,
-                        weight: null, e: r.e, t: r.t });
-    });
-    if (t > 0) pct = Math.round((e / t) * 10000) / 100;
-  }
+  });
 
+  const pct = wtot > 0 ? Math.round((wsum / wtot) * 10000) / 100 : null;
   return { pct, breakdown };
 }
 
-//  Live grade display ─
+//  Live grade display
 function updateLiveGrade() {
   const el  = document.getElementById('liveGrade');
   const pEl = document.getElementById('livePercent');
   const lEl = document.getElementById('liveLetter');
   const src = document.getElementById('gradeSource');
-
   const deltaEl = document.getElementById('gradeDelta');
 
   if (!userHasEdited) {
-    // Show IC's official grade unchanged
     el.className = 'live-grade ' + gradeClass(IC_PERCENT);
     pEl.textContent = IC_PERCENT != null ? IC_PERCENT : '—';
     if (lEl) lEl.textContent = IC_LETTER || '';
@@ -318,7 +303,6 @@ function updateLiveGrade() {
     return;
   }
 
-  // User has modified something — show calculated projection
   const active = liveAssignments.filter(a => !a._deleted);
   const { pct, breakdown } = calcGrade(active);
   el.className = 'live-grade ' + gradeClass(pct);
@@ -329,7 +313,6 @@ function updateLiveGrade() {
     ? `projected · ${excludedCount} excluded`
     : 'projected';
 
-  // Delta vs IC's real grade
   if (deltaEl) {
     if (pct != null && IC_PERCENT != null) {
       const diff = Math.round((pct - IC_PERCENT) * 100) / 100;
@@ -349,7 +332,7 @@ function updateLiveGrade() {
   showBreakdown(breakdown, pct);
 }
 
-//  Breakdown panel 
+//  Breakdown panel
 function showBreakdown(breakdown, overall) {
   let panel = document.getElementById('breakdownPanel');
   if (!panel) {
@@ -357,7 +340,6 @@ function showBreakdown(breakdown, overall) {
     panel.id = 'breakdownPanel';
     panel.className = 'panel';
     panel.style.cssText = 'margin-bottom:20px';
-    // Insert before the assignment panel
     const ap = document.getElementById('assignmentPanel');
     ap.parentNode.insertBefore(panel, ap);
   }
@@ -407,7 +389,7 @@ function hideBreakdown() {
   if (panel) panel.style.display = 'none';
 }
 
-//  Row score change handler ─
+//  Row score change handler
 function onScoreChange(input) {
   const row = input.closest('tr');
   const idx = parseInt(row.dataset.id);
@@ -418,14 +400,11 @@ function onScoreChange(input) {
   const earned = parseFloat(earnedEl.value);
   const total  = parseFloat(totalEl.value);
 
-  const prevEarned = liveAssignments[idx].earned;  // before update
+  const prevEarned = liveAssignments[idx].earned;
   liveAssignments[idx].earned = isNaN(earned) ? null : earned;
   liveAssignments[idx].total  = isNaN(total)  ? null : total;
   const newEarned  = liveAssignments[idx].earned;
 
-  // Only switch to projected mode when the change actually affects the grade:
-  // i.e. when earned was set before (clearing it matters) or is set now.
-  // Changing only the total on a still-empty row has no effect on calcGrade.
   if (prevEarned !== null || newEarned !== null) {
     userHasEdited = true;
   }
@@ -438,7 +417,6 @@ function onScoreChange(input) {
     pctEl.className = 'pct-cell muted';
   }
 
-  // Mark row as modified if different from original
   const origEarned = row.dataset.origEarned;
   const origTotal  = row.dataset.origTotal;
   const earnedStr  = isNaN(earned) ? '' : String(earned);
@@ -449,12 +427,10 @@ function onScoreChange(input) {
   updateLiveGrade();
 }
 
-//  Reset all changes 
+//  Reset all changes
 function resetAll() {
   userHasEdited = false;
-  // Remove hypothetical rows from DOM
   document.querySelectorAll('.hypo-row').forEach(r => r.remove());
-  // Reset all modified inputs and exclusion toggles to original values
   document.querySelectorAll('tr[data-id]').forEach(row => {
     const oe = row.dataset.origEarned;
     const ot = row.dataset.origTotal;
@@ -476,29 +452,24 @@ function resetAll() {
       pctEl.className = 'pct-cell muted';
     }
   });
-  // Rebuild liveAssignments without hypotheticals
   liveAssignments = assignments.map(a => Object.assign({}, a));
   updateLiveGrade();
 }
 
-//  Add hypothetical assignment (global — picks first category) ─
+//  Add hypothetical assignment
 function addHypothetical() {
-  // Pick the first category that has a graded assignment, or fall back to first in CATEGORIES
   const firstCat = liveAssignments.find(a => a.category);
   const cat = firstCat ? firstCat.category : (CATEGORIES.length ? CATEGORIES[0].name : 'Uncategorized');
   addHypotheticalInCat(cat);
 }
 
-//  Add hypothetical to a specific category 
 function addHypotheticalInCat(catName) {
   userHasEdited = true;
-  // Find the table for this category
   const tables = document.querySelectorAll(`table[data-cat="${CSS.escape(catName)}"]`);
   const table  = tables.length ? tables[0] : document.querySelector('.assignments');
   if (!table) { alert('No assignment table found.'); return; }
 
   const newIdx = liveAssignments.length;
-  // Resolve weight: check CATEGORIES with case-insensitive match
   const normName = normCat(catName);
   const catObj = CATEGORIES.find(c => normCat(c.name) === normName);
   const catWeight = catObj ? catObj.weight : null;
@@ -529,7 +500,7 @@ function addHypotheticalInCat(catName) {
   tr.querySelector('.earned-input').focus();
 }
 
-//  Delete a hypothetical row 
+//  Delete a hypothetical row
 function deleteRow(btn) {
   const row = btn.closest('tr');
   const idx = parseInt(row.dataset.id);
@@ -540,7 +511,7 @@ function deleteRow(btn) {
   updateLiveGrade();
 }
 
-//  Final exam calculator 
+//  Final exam calculator
 async function finalCalc() {
   const desired = parseFloat(document.getElementById('desired').value);
   const weight  = parseFloat(document.getElementById('finalWeight').value);
@@ -561,15 +532,10 @@ async function finalCalc() {
   el.className   = 'result' + color;
 }
 
-//  Spinner snap — keeps exact IC values, forces clean ±1 arrow steps ─
-// When the browser steps a non-integer value (e.g. 47.5 with step=1) it snaps
-// to the nearest boundary (48) instead of adding exactly 1. We detect that
-// fractional delta and push the value a full unit from where it was.
+//  Spinner snap
 function snapStep(input) {
   const prev = input._prev;
   const curr = parseFloat(input.value);
-  // Guard: prev must be a real number — null coerces to 0 in JS arithmetic
-  // which would wrongly snap a freshly-typed 0.5 into 1.
   if (prev !== null && prev !== undefined && !isNaN(prev) && !isNaN(curr)) {
     const d = curr - prev;
     if (d !== 0 && Math.abs(d) < 1) {
@@ -585,7 +551,7 @@ function initScoreInputs() {
   });
 }
 
-//  Init ─
+//  Init
 initScoreInputs();
 updateLiveGrade();
 </script>
